@@ -12,7 +12,9 @@ import adafruit_mcp3xxx.mcp3008 as MCP
 import time
 import pigpio
 from adafruit_mcp3xxx.analog_in import AnalogIn
-#from time import sleep
+# from time import sleep
+import threading
+import queue
 
 # create readouts for pi sensors
 # create the spi bus
@@ -40,12 +42,42 @@ pbepath = "/Users/jamiemoni/Downloads/pbe_smartsleeve+.png"
 dph = pH.voltage
 # temperature value
 dtp1 = temp.voltage
-# calibrated temperature baseline
-dtp1c = 96
 # impedance value
 dip1 = imp.voltage
-# calibrated impedance value
-dip1c = 100
+
+
+class SensorReader(threading.Thread):
+    def __init__(self, queue):
+        super().__init__()
+        self.queue = queue
+
+    def run(self):
+        while True:
+            # Read sensor data
+            dph = pH.voltage
+            dtp1 = temp.voltage
+            dip1 = imp.voltage
+
+            # Perform calculations and color changes as needed
+            # ...
+
+            # Put sensor data into the queue
+            self.queue.put({
+                'dph': dph,
+                'dtp1': dtp1,
+                'dip1': dip1,
+                # Add other sensor data as needed
+            })
+
+            # Sleep for 1 second (adjust as needed)
+            time.sleep(1)
+
+
+# Create a thread for sensor reading
+sensor_queue = queue.Queue()
+sensor_reader = SensorReader(sensor_queue)
+sensor_reader.daemon = True
+sensor_reader.start()
 
 
 class App(tk.Tk):
@@ -63,7 +95,7 @@ class App(tk.Tk):
         container.grid_columnconfigure(0, weight=1)
         self.frames = {}
 
-        for F in (Home, Login, Data, Calibration, FAQ, AboutUs):
+        for F in (Home, Login, Data, FAQ, AboutUs):
             page_name = F.__name__
             frame = F(master=container, controller=self)
             self.frames[page_name] = frame
@@ -84,6 +116,27 @@ class App(tk.Tk):
 
     def home_delay(self):
         self.show_frame('Login')
+
+    def update_sensor_data(self):
+        try:
+            # Get sensor data from the queue
+            sensor_data = sensor_queue.get_nowait()
+
+            # Update labels on the Data page
+            data_frame = self.frames["Data"]
+            data_frame.dph = sensor_data['cpht']
+            data_frame.cph = sensor_data['cph']
+            data_frame.dtp = sensor_data['ctpt']
+            data_frame.ctp = sensor_data['ctp']
+            data_frame.dip = sensor_data['cipt']
+            data_frame.cip = sensor_data['cip']
+
+            # ... (update other labels as needed)
+
+        except queue.Empty:
+            pass
+
+        self.after(1000, self.update_sensor_data)
 
 
 class Home(tk.Frame):
@@ -159,66 +212,33 @@ class Login(tk.Frame):
         lname.place(x=161.5, y=231, anchor=CENTER)
 
 
-class Calibration(tk.Frame):
-
-    def __init__(self, master, controller):
-        super().__init__(master, bg='light blue', height=700)
-        self.controller = controller
-        self.cf = font.Font(size=20)
-        self.dtp1c_values = deque(maxlen=10)  # Keep the last 10 values for rolling average
-        self.dip1c_values = deque(maxlen=10)  # Keep the last 10 values for rolling average
-        self.calibration_widgets()
-
-    def calibration_widgets(self):
-        calibrate = tk.Button(self, text="Calibrate", width=15, height=3, font=self.cf, bg="gray", fg="black",
-                              highlightbackground='light blue',
-                              command=lambda: self.calibrate())
-        calibrate.place(x=161.5, y=250, anchor=CENTER)
-
-        calibrate = tk.Button(self, text="Already Calibrated", width=15, height=3, font=self.cf, bg="gray", fg="black",
-                              highlightbackground=
-                              'light blue', command=lambda: self.controller.show_frame("Data"))
-        calibrate.place(x=161.5, y=400, anchor=CENTER)
-
-    def calibrate(self):
-        global dtp1c, dip1c
-
-        # Simulate calibration process (replace this with actual calibration logic)
-        self.dtp1c_values.append(dtp1c)
-        self.dip1c_values.append(dip1c)
-
-        # Calculate rolling average for temperature and impedance
-        rolling_average_dtp1c = sum(self.dtp1c_values) / len(self.dtp1c_values)
-        rolling_average_dip1c = sum(self.dip1c_values) / len(self.dip1c_values)
-
-        dtp1c = rolling_average_dtp1c
-        dip1c = rolling_average_dip1c
-
-        self.after(3000)
-        self.controller.show_frame("Data")
-
-
 # change color based on read values
-if dph > 7.3:
+if dph < 1.0:
     cph = "red"
-elif 5.6 <= dph <= 7.3:
+    cpht = 'Unhealthy'
+elif 5.0 <= dph <= 1.3:
     cph = "yellow"
+    cpht = 'Caution'
 else:
     cph = "green"
+    cpht = 'Healthy'
 
-if dtp1 - 5.4 > dtp1c:
+if 1.4 > dtp1:
     ctp = "red"
-elif dtp1 - 1.8 <= dtp1c <= dtp1 - 5.4:
+    ctpt = 'Unhealthy'
+elif 1.4 <= dtp1 <= 1.5:
     ctp = "yellow"
+    ctpt = 'Caution'
 else:
     ctp = "green"
+    ctpt = 'Healthy'
 
-if dip1 < 0.8 * dip1c:
+if dip1 > 2.0:
     cip = "red"
-elif 0.8 * dip1c <= dip1 <= 0.9 * dip1c:
-    cip = "yellow"
+    cipt = 'Unhealthy'
 else:
     cip = "green"
+    cipt = 'Healthy'
 
 
 class Data(tk.Frame):
@@ -230,11 +250,11 @@ class Data(tk.Frame):
         self.controller = controller
         self.dl = font.Font(size=30)
         self.dt = font.Font(size=25)
-        self.dph = dph
+        self.dph = cpht
         self.cph = cph
-        self.dtp = f"{dtp1}\N{DEGREE SIGN}F"
+        self.dtp = ctpt
         self.ctp = ctp
-        self.dip = str(dip1) + " m\u03A9"
+        self.dip = cipt
         self.cip = cip
         self.data_widgets()
         self.load_images_data()
