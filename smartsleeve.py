@@ -2,6 +2,7 @@ import tkinter as tk  # python 3
 from tkinter import font
 from tkinter import *
 from PIL import ImageTk, Image
+from collections import deque
 
 # Constants for image paths
 LOGO_PATH = "/Users/jamiemoni/Downloads/logosafesleeve.png"
@@ -12,10 +13,44 @@ ppath = "/Users/jamiemoni/Downloads/p_smartsleeve+.png"
 gpath = "/Users/jamiemoni/Downloads/g_smartsleeve+.png"
 pbepath = "/Users/jamiemoni/Downloads/pbe_smartsleeve+.png"
 
+# pH value
+dph = 6
+# temperature value
+dtp1 = 100
+# calibrated temperature baseline
+dtp1c = 96
+# impedance value
+dip1 = 102
+# calibrated impedance value
+dip1c = 100
 
-dph = 5.60
-dtp = 105
-dip = 105
+# Calibrate baseline temperature and impedance values
+# calibration for temperature
+# calibration for impedance
+
+# change color based on read values
+if dph > 7.4:
+    cph = "red"
+elif 5.6 <= dph <= 7.3:
+    cph = "yellow"
+else:
+    cph = "green"
+
+if dtp1 - 5.4 > dtp1c:
+    ctp = "red"
+elif dtp1 - 1.8 <= dtp1c <= dtp1c - 5.4:
+    ctp = "yellow"
+else:
+    ctp = "green"
+
+if dip1 < 0.8 * dip1c:
+    cip = "red"
+elif 0.8 * dip1c <= dip1 <= dip1c:
+    cip = "yellow"
+else:
+    cip = "green"
+
+
 class App(tk.Tk):
 
     def __init__(self, title, size):
@@ -31,7 +66,7 @@ class App(tk.Tk):
         container.grid_columnconfigure(0, weight=1)
         self.frames = {}
 
-        for F in (Home, Login, Data, FAQ, AboutUs):
+        for F in (Home, Login, Data, Calibration, FAQ, AboutUs):
             page_name = F.__name__
             frame = F(master=container, controller=self)
             self.frames[page_name] = frame
@@ -110,7 +145,7 @@ class Login(tk.Frame):
         self.password_entry.place(x=161.5, y=413, anchor=CENTER)
 
         login = tk.Button(self, text="Login", width=7, bg="gray", fg="black", highlightbackground='light blue',
-                          command=lambda: self.controller.show_frame("Data"))
+                          command=lambda: self.controller.show_frame("Calibration"))
         login.place(x=161.5, y=490, anchor=CENTER)
 
     def load_images_login(self):
@@ -127,6 +162,38 @@ class Login(tk.Frame):
         lname.place(x=161.5, y=231, anchor=CENTER)
 
 
+class Calibration(tk.Frame):
+
+    def __init__(self, master, controller):
+        super().__init__(master, bg='light blue', height=700)
+        self.controller = controller
+        self.dtp1c_values = deque(maxlen=10)  # Keep the last 10 values for rolling average
+        self.dip1c_values = deque(maxlen=10)  # Keep the last 10 values for rolling average
+        self.calibration_widgets()
+
+    def calibration_widgets(self):
+        calibrate = tk.Button(self, text="Calibrate", width=7, bg="gray", fg="black", highlightbackground='light blue',
+                              command=lambda: self.calibrate())
+        calibrate.place(x=161.5, y=350, anchor=CENTER)
+
+    def calibrate(self):
+        global dtp1c, dip1c
+
+        # Simulate calibration process (replace this with actual calibration logic)
+        self.dtp1c_values.append(dtp1c)
+        self.dip1c_values.append(dip1c)
+
+        # Calculate rolling average for dtp1c and dip1c
+        rolling_average_dtp1c = sum(self.dtp1c_values) / len(self.dtp1c_values)
+        rolling_average_dip1c = sum(self.dip1c_values) / len(self.dip1c_values)
+
+        dtp1c = rolling_average_dtp1c
+        dip1c = rolling_average_dip1c
+
+        self.after(3000)
+        self.controller.show_frame("Data")
+
+
 class Data(tk.Frame):
     def __init__(self, master, controller):
         super().__init__(master, bg='light blue', height=700)
@@ -136,11 +203,11 @@ class Data(tk.Frame):
         self.dl = font.Font(size=30)
         self.dt = font.Font(size=25)
         self.dph = dph
-        self.cph = 'green'
-        self.dtp = f"{dtp}\N{DEGREE SIGN}F"
-        self.ctp = 'red'
-        self.dip = str(dip) + " m\u03A9"
-        self.cip = 'green'
+        self.cph = cph
+        self.dtp = f"{dtp1}\N{DEGREE SIGN}F"
+        self.ctp = ctp
+        self.dip = str(dip1) + " m\u03A9"
+        self.cip = cip
         self.data_widgets()
         self.load_images_data()
 
@@ -160,6 +227,15 @@ class Data(tk.Frame):
         imp_label.place(x=161.5, y=385, anchor=CENTER)
         imp_text = tk.Label(self, text=self.dip, font=self.dt, fg=self.cip, bg='light blue')
         imp_text.place(x=161.5, y=455, anchor=CENTER)
+
+        # Check if two of cph, ctp, or cip are yellow or red
+        error_condition = (self.cph in ['yellow', 'red']) + (self.ctp in ['yellow', 'red']) + (
+                    self.cip in ['yellow', 'red'])
+
+        if error_condition >= 2:
+            # Display message on the screen
+            error_label = tk.Label(self, text="Contact your Provider", font=self.dt, fg='red', bg='light blue')
+            error_label.place(x=161.5, y=520, anchor=CENTER)
 
         sign_out = tk.Button(self, text="Sign Out", width=7, bg="gray", fg="black", highlightbackground='light blue',
                              command=lambda: self.go_to_login())
@@ -305,7 +381,7 @@ class AboutUs(tk.Frame):
         apic = tk.Label(self, image=self.a_image, bg='#0c246a')
         apic.place(x=81.5, y=100, anchor=CENTER)
 
-        apicl = tk.Label(self, text='Ajit Saran', font=self.nt, bg='#0c246a', fg = 'white', width = 15)
+        apicl = tk.Label(self, text='Ajit Saran', font=self.nt, bg='#0c246a', fg='white', width=15)
         apicl.place(x=81.5, y=200, anchor=CENTER)
 
         jphoto = Image.open(jpath)
@@ -314,7 +390,7 @@ class AboutUs(tk.Frame):
         jpic = tk.Label(self, image=self.j_image, bg='#0c246a')
         jpic.place(x=241.5, y=100, anchor=CENTER)
 
-        jpicl = tk.Label(self, text='Jamie Moni', font=self.nt, bg = '#0c246a', fg='white', width = 15)
+        jpicl = tk.Label(self, text='Jamie Moni', font=self.nt, bg='#0c246a', fg='white', width=15)
         jpicl.place(x=241.5, y=200, anchor=CENTER)
 
         gphoto = Image.open(gpath)
@@ -323,7 +399,7 @@ class AboutUs(tk.Frame):
         gpic = tk.Label(self, image=self.g_image, bg='#0c246a')
         gpic.place(x=81.5, y=300, anchor=CENTER)
 
-        gpicl = tk.Label(self, text='Gautham Nair', font=self.nt, bg = '#0c246a', fg='white', width = 15)
+        gpicl = tk.Label(self, text='Gautham Nair', font=self.nt, bg='#0c246a', fg='white', width=15)
         gpicl.place(x=81.5, y=400, anchor=CENTER)
 
         pphoto = Image.open(ppath)
@@ -332,7 +408,7 @@ class AboutUs(tk.Frame):
         ppic = tk.Label(self, image=self.p_image, bg='#0c246a')
         ppic.place(x=241.5, y=300, anchor=CENTER)
 
-        ppicl = tk.Label(self, text='Pavan Raghupathy', font=self.nt, bg = '#0c246a', fg='white', width = 15)
+        ppicl = tk.Label(self, text='Pavan Raghupathy', font=self.nt, bg='#0c246a', fg='white', width=15)
         ppicl.place(x=241.5, y=400, anchor=CENTER)
 
         pbephoto = Image.open(pbepath)
