@@ -5,7 +5,6 @@ import digitalio
 import board
 import adafruit_mcp3xxx.mcp3008 as MCP
 import time
-import pigpio
 from adafruit_mcp3xxx.analog_in import AnalogIn
 from time import sleep
 # create the spi bus
@@ -19,14 +18,19 @@ mcp = MCP.MCP3008(spi, cs)
 
 # create an analog input channel on pin 0
 pH = AnalogIn(mcp, MCP.P2)
-temp = AnalogIn(mcp,MCP.P1)
-temp2 = AnalogIn(mcp,MCP.P0)
+temp = AnalogIn(mcp,MCP.P7)
+temp2 = AnalogIn(mcp,MCP.P3)
 imp = AnalogIn(mcp, MCP.P4)
 
-
+tempCutoff = 1.4
+pHCutoff = 1.0
+impCutoff = 2.0
 
 while True:
-	print("ADC Voltage 3: " + str(pH.voltage))
+	print("pH " + str(pH.voltage))
+	print("Temperature " + str(temp.voltage))
+	print("Impedance " + str(imp.voltage))
+	
 	sleep(1)
 
 pi.stop()
